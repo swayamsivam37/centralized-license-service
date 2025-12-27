@@ -40,31 +40,44 @@ These concerns remain owned by external systems integrating with the License Ser
 
 ## Architecture and Design
 
-### Actors
+The Centralized License Service is designed as a standalone, API-driven backend
+system that acts as the single source of truth for license lifecycle and product
+entitlements across multiple brands.
 
-The Centralized License Service is a standalone backend service that acts as the
-single source of truth for licenses and entitlements across multiple brands.
+The architecture emphasizes:
+- clear separation of responsibilities
+- explicit trust boundaries
+- extensibility for future license-related capabilities
+- simplicity over premature optimization
 
-The system is designed around clear boundaries between actors and responsibilities,
-favoring explicit APIs and loose coupling.
+No graphical user interface is provided; all interactions with the system are
+performed via HTTP APIs.
+
+---
+
+### Actors and Trust Boundaries
+
+The system interacts with two distinct categories of actors, each with different
+levels of trust and responsibilities.
 
 #### Brand Systems (Trusted Clients)
 
-Brand systems represent internal backend services operated by individual brands
-(e.g., RankMath, WP Rocket).
+Brand systems represent internal backend services operated by individual brands.
+These systems are considered trusted and are responsible for integrating business
+events such as purchases, renewals, and cancellations with the License Service.
 
-Brand systems are responsible for:
-- Creating license keys
-- Creating and associating licenses to license keys
-- Updating license lifecycle (renew, suspend, cancel)
-- Listing licenses by customer email across the ecosystem
+Brand systems can:
+- provision license keys and licenses for customers
+- associate multiple licenses with a single license key
+- update license lifecycle states (e.g. renew, suspend, cancel)
+- query licenses by customer email across the ecosystem (restricted access)
 
-Brand systems authenticate as brands and operate in a trusted context.
-They do not represent end users directly.
+Brand systems authenticate as brands and operate within a clearly scoped tenant
+context. They do not represent end users directly.
 
-Examples:
-- rankmath.com backend
-- wp-rocket.me backend
+Examples include:
+- a subscription backend for a WordPress plugin vendor
+- a billing system responsible for managing product purchases
 
 ---
 
@@ -72,40 +85,79 @@ Examples:
 
 End-user products are distributed applications that consume licenses, such as:
 - WordPress plugins
-- Desktop applications
-- CLI tools
+- desktop applications
+- command-line tools
 
-End-user products are responsible for:
-- Activating a license key for a specific instance (site URL, machine ID, host)
-- Checking license status and entitlements
-- Deactivating an activation when an instance is removed
+These clients are considered untrusted and interact with the License Service using
+license keys and instance identifiers.
 
-End-user products authenticate using license keys and instance identifiers
-and must be treated as untrusted clients.
+End-user products can:
+- activate a license key for a specific instance (e.g. site URL, machine ID)
+- check license status and entitlements
+- deactivate an activation to free a seat (if applicable)
 
----
-
-### System Boundaries
-
-The Centralized License Service deliberately excludes responsibilities that belong
-to brand-specific systems.
-
-Out of scope responsibilities include:
-- User authentication and identity management
-- Billing, subscriptions, and payments
-- Customer-facing user interfaces
-
-Brand systems remain the source of truth for users and billing,
-while the License Service focuses exclusively on license lifecycle,
-entitlements, and activation state.
+End-user products never have access to brand-level data and are strictly limited
+to operations related to their own license key.
 
 ---
 
-### High-Level Flow
+### System Boundaries and Non-Goals
 
-1. A brand system provisions a license key and associated licenses
-   for a customer email after a successful purchase.
-2. The license key is delivered to the end user by the brand system.
+The License Service deliberately excludes responsibilities that belong to external
+systems. In particular, it does not manage:
+
+- user authentication or identity management
+- billing, subscriptions, or payment processing
+- customer-facing user interfaces
+
+Brand systems remain the source of truth for users and billing, while the License
+Service focuses exclusively on license lifecycle, entitlements, and activation
+state.
+
+This separation allows the License Service to remain reusable, brand-agnostic,
+and easier to reason about operationally.
+
+---
+
+### High-Level Request Flow
+
+At a high level, interactions with the License Service follow these flows:
+
+1. A brand system provisions a license key and one or more licenses for a customer
+   after a successful purchase.
+2. The license key is delivered to the customer by the brand system.
 3. An end-user product activates the license key for a specific instance.
-4. The product periodically validates the license status and entitlements.
-5. Brand systems may query or update licenses as subscription states change.
+4. The end-user product periodically validates the license status and entitlements.
+5. Brand systems update license lifecycle as subscription state changes over time.
+
+These flows are exposed through explicit, versioned APIs and are designed to be
+idempotent and observable in a production environment.
+
+---
+
+### Multi-Tenancy Model (High-Level)
+
+The system is designed as a multi-tenant service where each brand represents a
+logical tenant.
+
+All license keys, licenses, and products are scoped to a single brand. Data
+isolation is enforced at the application level, ensuring that licenses and license
+keys cannot span multiple brands.
+
+Cross-brand queries (such as listing licenses by customer email) are restricted
+to trusted brand systems and are not exposed to end-user products.
+
+---
+
+### Architectural Principles
+
+The following principles guide the overall design:
+
+- **Single source of truth**: All license and entitlement decisions originate from
+  the License Service.
+- **Explicit trust boundaries**: Brand systems and end-user products have clearly
+  separated capabilities.
+- **Extensibility**: The model supports future concepts such as seat limits,
+  add-ons, and usage-based entitlements.
+- **Operational simplicity**: The service is designed to be observable, testable,
+  and easy to operate in production.
