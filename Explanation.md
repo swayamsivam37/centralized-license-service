@@ -265,6 +265,7 @@ Database constraints and application-level checks ensure that:
 - ✅ Brand isolation: **Implemented**
 - ✅ Add-on scenario (reuse key): **Implemented**
 - 🟡 Authentication & authorization: **Designed-only**
+- ✅ Automated feature tests covering happy path, add-on behavior, and brand isolation
 
 ---
 
