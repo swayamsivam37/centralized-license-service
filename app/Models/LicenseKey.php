@@ -21,4 +21,9 @@ class LicenseKey extends Model
     {
         return $this->hasMany(License::class);
     }
+
+    public function activations()
+    {
+        return $this->hasMany(Activation::class);
+    }
 }
