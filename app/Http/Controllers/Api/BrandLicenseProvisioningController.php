@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\LicenseKey;
 use App\Services\LicenseProvisioningService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class BrandLicenseProvisioningController extends Controller
 {
@@ -32,7 +32,7 @@ class BrandLicenseProvisioningController extends Controller
 
         $existingLicenseKey = null;
 
-        if (!empty($validated['existing_license_key_id'])) {
+        if (! empty($validated['existing_license_key_id'])) {
             $existingLicenseKey = LicenseKey::findOrFail(
                 $validated['existing_license_key_id']
             );
@@ -51,7 +51,7 @@ class BrandLicenseProvisioningController extends Controller
                 'key' => $licenseKey->key,
                 'customer_email' => $licenseKey->customer_email,
             ],
-            'licenses' => $licenseKey->licenses->map(fn($license) => [
+            'licenses' => $licenseKey->licenses->map(fn ($license) => [
                 'product' => $license->product->code,
                 'status' => $license->status,
                 'expires_at' => $license->expires_at->toDateString(),

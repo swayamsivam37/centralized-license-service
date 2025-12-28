@@ -3,8 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Brand;
-use App\Models\Product;
 use App\Models\LicenseKey;
+use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,6 +13,7 @@ class BrandLicenseProvisioningTest extends TestCase
     use RefreshDatabase;
 
     protected Brand $brand;
+
     protected Product $product;
 
     protected function setUp(): void

@@ -3,11 +3,11 @@
 namespace App\Services;
 
 use App\Models\Brand;
-use App\Models\Product;
-use App\Models\LicenseKey;
 use App\Models\License;
-use Illuminate\Support\Str;
+use App\Models\LicenseKey;
+use App\Models\Product;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -34,28 +34,24 @@ class LicenseProvisioningService
      * atomicity: either all licenses are provisioned successfully, or none
      * are.
      *
-     * @param Brand $brand
-     *   The brand on whose behalf the provisioning is performed.
-     *
-     * @param string $customerEmail
-     *   The email address identifying the customer. The service does not
-     *   own user identity and treats this value as an external reference.
-     *
-     * @param array $licensesData
-     *   A list of licenses to provision. Each item must contain:
-     *   - product_code (string)
-     *   - expires_at (datetime string)
-     *
-     * @param LicenseKey|null $existingLicenseKey
-     *   Optional existing license key to which new licenses should be
-     *   attached. Must belong to the same brand.
-     *
+     * @param  Brand  $brand
+     *                        The brand on whose behalf the provisioning is performed.
+     * @param  string  $customerEmail
+     *                                 The email address identifying the customer. The service does not
+     *                                 own user identity and treats this value as an external reference.
+     * @param  array  $licensesData
+     *                               A list of licenses to provision. Each item must contain:
+     *                               - product_code (string)
+     *                               - expires_at (datetime string)
+     * @param  LicenseKey|null  $existingLicenseKey
+     *                                               Optional existing license key to which new licenses should be
+     *                                               attached. Must belong to the same brand.
      * @return LicenseKey
-     *   The provisioned license key with its associated licenses loaded.
+     *                    The provisioned license key with its associated licenses loaded.
      *
      * @throws InvalidArgumentException
-     *   If the license key does not belong to the brand or if a product
-     *   cannot be resolved for the brand.
+     *                                  If the license key does not belong to the brand or if a product
+     *                                  cannot be resolved for the brand.
      */
     public function provision(
         Brand $brand,
@@ -88,14 +84,12 @@ class LicenseProvisioningService
     /**
      * Create a new license key for a customer under a specific brand.
      *
-     * @param Brand $brand
-     *   The brand owning the license key.
-     *
-     * @param string $customerEmail
-     *   The customer email associated with the license key.
-     *
+     * @param  Brand  $brand
+     *                        The brand owning the license key.
+     * @param  string  $customerEmail
+     *                                 The customer email associated with the license key.
      * @return LicenseKey
-     *   The newly created license key.
+     *                    The newly created license key.
      */
     protected function createLicenseKey(
         Brand $brand,
@@ -114,17 +108,15 @@ class LicenseProvisioningService
      * This prevents cross-brand license key reuse, which is explicitly
      * disallowed by the domain model.
      *
-     * @param Brand $brand
-     *   The brand performing the provisioning.
-     *
-     * @param LicenseKey $licenseKey
-     *   The license key to validate.
-     *
+     * @param  Brand  $brand
+     *                        The brand performing the provisioning.
+     * @param  LicenseKey  $licenseKey
+     *                                  The license key to validate.
      * @return LicenseKey
-     *   The validated license key.
+     *                    The validated license key.
      *
      * @throws InvalidArgumentException
-     *   If the license key does not belong to the brand.
+     *                                  If the license key does not belong to the brand.
      */
     protected function validateExistingLicenseKey(
         Brand $brand,
@@ -146,21 +138,17 @@ class LicenseProvisioningService
      * for the same product is already attached to the license key, the
      * operation is ignored to avoid duplication.
      *
-     * @param Brand $brand
-     *   The brand owning the product.
-     *
-     * @param LicenseKey $licenseKey
-     *   The license key to attach the license to.
-     *
-     * @param array $licenseData
-     *   License configuration data containing:
-     *   - product_code (string)
-     *   - expires_at (datetime string)
-     *
-     * @return void
+     * @param  Brand  $brand
+     *                        The brand owning the product.
+     * @param  LicenseKey  $licenseKey
+     *                                  The license key to attach the license to.
+     * @param  array  $licenseData
+     *                              License configuration data containing:
+     *                              - product_code (string)
+     *                              - expires_at (datetime string)
      *
      * @throws InvalidArgumentException
-     *   If the product cannot be found for the brand.
+     *                                  If the product cannot be found for the brand.
      */
     protected function attachLicense(
         Brand $brand,
@@ -197,12 +185,12 @@ class LicenseProvisioningService
      * can be replaced later without impacting consumers.
      *
      * @return string
-     *   The generated license key.
+     *                The generated license key.
      */
     protected function generateLicenseKey(): string
     {
-        return strtoupper(Str::random(4)) . '-' .
-            strtoupper(Str::random(4)) . '-' .
+        return strtoupper(Str::random(4)).'-'.
+            strtoupper(Str::random(4)).'-'.
             strtoupper(Str::random(4));
     }
 }
