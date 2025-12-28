@@ -1,3 +1,5 @@
+# Explanation.md
+
 ## 1. Problem and Requirements
 
 Organizations operating multiple products or brands often rely on licenses to
@@ -6,19 +8,19 @@ manages licensing independently, while end-user products (e.g. plugins or apps)
 need to validate entitlements in a consistent way.
 
 Without a centralized license system, this leads to:
-- fragmented license data across brands
-- inconsistent validation logic between products
-- difficulty bundling or sharing entitlements
-- increased complexity in distributed clients
+- Fragmented license data across brands
+- Inconsistent validation logic between products
+- Difficulty bundling or sharing entitlements
+- Increased complexity in distributed clients
 
 The goal of this project is to design and implement a **Centralized License
 Service** that acts as a single source of truth for license lifecycle and product
 entitlements across multiple brands.
 
 The service is intentionally **decoupled** from:
-- user identity management
-- billing and subscriptions
-- customer-facing UI
+- User identity management
+- Billing and subscriptions
+- Customer-facing UI
 
 Brand systems remain responsible for users and payments, while this service
 focuses exclusively on licensing concerns.
@@ -33,7 +35,7 @@ The Centralized License Service is a standalone, API-driven backend system.
 
 - **Single source of truth** for license state and entitlements
 - **Explicit trust boundaries** between brand systems and end-user products
-- **Clear domain separation** between license keys and licenses
+- **Clear domain separation** between license keys, licenses, and activations
 - **Extensibility** for future concepts such as activations and seat limits
 - **Simplicity over premature optimization**
 
@@ -49,10 +51,10 @@ Brand systems are internal backend services operated by each brand.
 They are trusted and allowed to manage license data.
 
 Brand systems can:
-- create license keys
-- create and associate licenses
-- update license lifecycle
-- query license data for their own customers
+- Create license keys
+- Create and associate licenses
+- Update license lifecycle
+- Query license data for customers (including cross-brand queries)
 
 Brand systems operate in a **brand-scoped tenant context** and never act on behalf
 of end users.
@@ -63,7 +65,7 @@ of end users.
 
 End-user products are distributed applications such as:
 - WordPress plugins
-- desktop applications
+- Desktop applications
 - CLI tools
 
 They authenticate using license keys and instance identifiers and are treated as
@@ -77,37 +79,16 @@ untrusted clients.
 
 Brand
 └── LicenseKey
-└── License (one per product)
-
-```
-
-- A **License Key** is a customer-facing token used by end users.
-- A **License** represents entitlement to a single product.
-- Multiple licenses can be grouped under a single license key.
-- Lifecycle state (`valid`, `suspended`, `cancelled`, `expired`) belongs to the
-  license, not the license key.
-
----
-
-### License Activation Model (US3)
-
-License activation represents the association between a license key and a specific
-end-user instance (e.g. site URL, machine ID, or host).
-
-```
-
-Brand
-└── LicenseKey
-├── License (product entitlement)
+├── License (one per product)
 └── Activation (instance usage)
 
 ```
 
-Key characteristics:
-- Activations belong to license keys, not individual licenses
-- A single activation unlocks multiple product licenses
-- Instance identifiers are opaque strings
-- Deactivation is supported at the data level but not yet exposed via API
+- A **License Key** is a customer-facing token used by end users
+- A **License** represents entitlement to a single product
+- Multiple licenses can be grouped under a single license key
+- Lifecycle state belongs to the license, not the license key
+- Activations represent usage by a specific instance
 
 ---
 
@@ -116,17 +97,24 @@ Key characteristics:
 ### License-Level Lifecycle vs License-Key-Level Lifecycle
 
 **Decision:**  
-Lifecycle state is attached to individual licenses.
+Lifecycle state is attached to individual licenses, not license keys.
 
 **Why:**  
-Allows partial suspension or expiration of products under one key.
+This allows independent management of products under a shared license key
+(e.g. suspending an add-on without cancelling the main product).
+
+**Alternative considered:**  
+Applying lifecycle state at the license key level.
+
+**Why rejected:**  
+It would prevent partial suspension or expiration of individual products.
 
 ---
 
 ### Single Lifecycle Endpoint with Action-Based Payload
 
 **Decision:**  
-One endpoint with an `action` field:
+Use a single endpoint for lifecycle changes:
 
 ```
 
@@ -134,99 +122,238 @@ PATCH /api/brands/{brand}/licenses/{license}
 
 ````
 
+Payload example:
 ```json
 { "action": "suspend" }
 ````
 
-**Why rejected alternatives:**
-Multiple endpoints increase API surface and duplication.
+**Alternative considered:**
+
+* `/suspend`
+* `/resume`
+* `/cancel`
+* `/renew`
+
+**Why rejected:**
+
+* Larger API surface
+* Harder to evolve
+* More duplication
 
 ---
 
-### Domain Exceptions vs HTTP Errors (US4)
+### Explicit Brand Context in Routes
 
 **Decision:**
-Domain services throw exceptions; controllers map them to HTTP responses.
+Include `{brand}` in brand-facing routes.
 
 **Why:**
-Keeps domain logic transport-agnostic and reusable.
 
-**Example:**
-Invalid license key → `InvalidArgumentException` → HTTP `404`.
+* Makes trust boundaries explicit
+* Avoids hidden tenant resolution
+* Simplifies reasoning during review
+
+Authentication is intentionally designed but not implemented.
 
 ---
 
-### Seat Limits (Designed, Not Implemented)
+### Activation at License-Key Level
 
+**Decision:**
+Activations are associated with license keys rather than individual licenses.
+
+**Why:**
+End-user products activate a single license key that unlocks multiple products.
+
+**Alternative considered:**
+Tracking activations per license.
+
+**Why rejected:**
+Would require multiple activations per instance and complicate validation.
+
+---
+
+### Idempotent Activation Requests
+
+**Decision:**
+Activating the same license key for the same instance is idempotent.
+
+**Why:**
+Distributed clients may retry activation due to network failures.
+
+**Trade-off:**
+No explicit signal is returned indicating whether activation was newly created.
+
+---
+
+### Seat Limits (Designed but Not Implemented)
+
+**Decision:**
 Seat limits are intentionally not enforced.
 
 **Intended approach:**
 
 * Add `max_activations`
-* Count active activations
-* Enforce transactionally
+* Count active activations (`deactivated_at IS NULL`)
+* Enforce limits transactionally
+* Reject activation when exceeded
+
+**Why not implemented:**
+Adds concurrency and policy complexity beyond the scope of this exercise.
+
+---
+
+### Cross-Brand License Queries (US6)
+
+**Decision:**
+Allow cross-brand queries by customer email for trusted brand systems.
+
+**Trade-off:**
+Requires strong authentication and authorization in real deployments.
+
+---
+
+### Scaling and Evolution Plan
+
+* Add authentication and RBAC
+* Enforce seat limits
+* Introduce audit logs and domain events
+* Cache read-heavy validation endpoints
+* Map domain errors to proper HTTP status codes
 
 ---
 
 ## 4. How the Solution Satisfies Each User Story
 
-### US1: Brand Can Provision a License
+### User Story 1: Brand Can Provision a License
 
 **Status:** ✅ Implemented
 
-Brands can create license keys and associate one or more licenses.
+**API: Create license key with licenses**
+
+```
+POST /api/brands/{brand}/license-keys
+```
+
+Request:
+
+```json
+{
+  "customer_email": "user@example.com",
+  "licenses": [
+    {
+      "product_code": "rankmath",
+      "expires_at": "2026-01-01"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "license_key": "ABCDE-12345",
+  "licenses": [
+    {
+      "product_code": "rankmath",
+      "status": "valid",
+      "expires_at": "2026-01-01"
+    }
+  ]
+}
+```
+
+**Add additional license**
+
+```
+POST /api/brands/{brand}/license-keys/{licenseKey}/licenses
+```
 
 ---
 
-### US2: Brand Can Change License Lifecycle
+### User Story 2: Brand Can Change License Lifecycle
 
 **Status:** ✅ Implemented
 
-Renew, suspend, resume, and cancel operations are enforced by domain rules.
+**API**
+
+```
+PATCH /api/brands/{brand}/licenses/{license}
+```
+
+Request:
+
+```json
+{ "action": "suspend" }
+```
+
+Response:
+
+```json
+{
+  "id": 1,
+  "status": "suspended"
+}
+```
 
 ---
 
-### US3: End-User Product Can Activate a License
+### User Story 3: End-User Product Can Activate a License
 
 **Status:** ✅ Implemented (seat limits designed only)
 
-**API:**
+**API**
 
 ```
 POST /api/activate
 ```
 
+Request:
+
 ```json
 {
   "license_key": "ABCDE-12345",
   "instance_id": "https://example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "active",
+  "licenses": [
+    {
+      "product_code": "rankmath",
+      "status": "valid",
+      "expires_at": "2026-01-01"
+    }
+  ]
 }
 ```
 
 ---
 
-### US4: User Can Check License Status
+### User Story 4: User Can Check License Status
 
 **Status:** ✅ Implemented
 
-End users can validate a license key and retrieve active entitlements.
-
-**API:**
+**API**
 
 ```
 POST /api/validate
 ```
 
-**Example request:**
+Request:
 
 ```json
 {
-  "license_key": "ABCDE-12345",
-  "instance_id": "https://example.com"
+  "license_key": "ABCDE-12345"
 }
 ```
 
-**Example response (valid):**
+Response:
 
 ```json
 {
@@ -234,7 +361,6 @@ POST /api/validate
   "licenses": [
     {
       "product_code": "rankmath",
-      "status": "valid",
       "expires_at": "2026-01-01"
     }
   ],
@@ -245,17 +371,69 @@ POST /api/validate
 }
 ```
 
-**Example response (invalid key):**
+---
+
+### User Story 5: Deactivate a Seat
+
+**Status:** 🧩 Designed Only
+
+**Intended API**
+
+```
+POST /api/deactivate
+```
+
+Request:
 
 ```json
 {
-  "message": "Invalid license key."
+  "license_key": "ABCDE-12345",
+  "instance_id": "https://example.com"
 }
 ```
 
 ---
 
+### User Story 6: Brand Can List Licenses by Customer Email
+
+**Status:** ✅ Implemented
+
+**API**
+
+```
+GET /api/licenses?email=user@example.com
+```
+
+Response:
+
+```json
+[
+  {
+    "brand": "rankmath",
+    "product": "rankmath",
+    "status": "valid",
+    "expires_at": "2026-01-01"
+  },
+  {
+    "brand": "wp-rocket",
+    "product": "wp-rocket",
+    "status": "valid",
+    "expires_at": "2025-12-31"
+  }
+]
+```
+
+---
+
 ## 5. How to Run Locally
+
+### Prerequisites
+
+* PHP 8.2+
+* Composer
+* SQLite
+
+### Setup
 
 ```bash
 composer install
@@ -267,51 +445,21 @@ php artisan serve
 
 ---
 
-### Example API Calls
-
-#### US1: Provision License
-
-```bash
-curl -X POST http://localhost:8000/api/brands/1/license-keys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_email": "user@example.com",
-    "licenses": [
-      {
-        "product_code": "rankmath",
-        "expires_at": "2026-01-01"
-      }
-    ]
-  }'
-```
-
-#### US4: Validate License
-
-```bash
-curl -X POST http://localhost:8000/api/validate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "license_key": "ABCDE-12345",
-    "instance_id": "https://example.com"
-  }'
-```
-
----
-
 ## 6. Known Limitations and Next Steps
 
 ### Known Limitations
 
-* No authentication
-* No rate limiting
+* No authentication or authorization
+* Domain exceptions return HTTP 500
 * No audit logs
+* No rate limiting
 * Seat limits not enforced
-* Activation deactivation not exposed
+* Deactivation not exposed via API
 
 ### Next Steps
 
-* US5: Deactivate seat
-* US6: Cross-brand license lookup
-* Add auth & observability
-
-
+* Implement US5 deactivation endpoint
+* Add authentication and RBAC
+* Add observability (logs, metrics, tracing)
+* Improve error handling
+----
