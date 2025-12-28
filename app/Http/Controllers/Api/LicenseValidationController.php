@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\LicenseValidationService;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\Response;
 
 class LicenseValidationController extends Controller
 {
@@ -19,11 +21,17 @@ class LicenseValidationController extends Controller
             'instance_id' => ['nullable', 'string'],
         ]);
 
-        return response()->json(
-            $this->validationService->validate(
-                $validated['license_key'],
-                $validated['instance_id'] ?? null
-            )
-        );
+        try {
+            return response()->json(
+                $this->validationService->validate(
+                    $validated['license_key'],
+                    $validated['instance_id'] ?? null
+                )
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], Response::HTTP_NOT_FOUND);
+        }
     }
 }

@@ -19,8 +19,7 @@ class LicenseValidationService
 
         $validLicenses = $licenseKey->licenses
             ->filter(
-                fn($license) =>
-                $license->status === 'valid' &&
+                fn ($license) => $license->status === 'valid' &&
                     (! $license->expires_at || $license->expires_at->isFuture())
             )
             ->values();
@@ -38,7 +37,7 @@ class LicenseValidationService
 
         return [
             'status' => 'valid',
-            'licenses' => $validLicenses->map(fn($license) => [
+            'licenses' => $validLicenses->map(fn ($license) => [
                 'product_code' => $license->product->code,
                 'status' => $license->status,
                 'expires_at' => optional($license->expires_at)?->toDateString(),
