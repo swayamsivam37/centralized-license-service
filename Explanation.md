@@ -148,6 +148,46 @@ Cross-brand queries (such as listing licenses by customer email) are restricted
 to trusted brand systems and are not exposed to end-user products.
 
 ---
+## How the Solution Satisfies Each User Story
+
+This section describes how each user story is addressed by the system, explicitly
+calling out which parts are fully implemented and which are currently design-only.
+
+---
+
+### US1: Brand can provision a license — **Implemented**
+
+**User Story**
+
+As a brand system, I can create license keys and licenses for a customer email and
+associate them together to grant access to one or more products.
+
+---
+
+#### Implementation Overview
+
+US1 is fully implemented through a brand-facing HTTP API and a dedicated domain
+service responsible for license provisioning.
+
+Brand systems can:
+
+- Generate a new license key for a customer
+- Associate one or more product-specific licenses with that license key
+- Reuse an existing license key to attach additional licenses (e.g. add-ons)
+- Retrieve the generated license key to transmit it to end users
+
+Each license:
+
+- Is associated with exactly one product
+- Has a lifecycle status (`valid`, `suspended`, `cancelled`)
+- Has an explicit expiration date
+
+---
+
+#### Key Components
+
+**API Endpoint (Implemented)**
+
 
 ### Architectural Principles
 
@@ -161,3 +201,70 @@ The following principles guide the overall design:
   add-ons, and usage-based entitlements.
 - **Operational simplicity**: The service is designed to be observable, testable,
   and easy to operate in production.
+
+
+
+This endpoint is intended for trusted brand systems and supports:
+
+- Creating a new license key
+- Attaching one or more licenses to the key
+- Optionally reusing an existing license key to attach additional licenses
+
+**Domain Service (Implemented)**
+
+`LicenseProvisioningService` encapsulates all business rules related to:
+
+- License key creation and reuse
+- Brand isolation and validation
+- Product ownership validation
+- License creation and association
+
+All provisioning logic is executed within a database transaction to ensure
+atomicity and consistency.
+
+**Data Model (Implemented)**
+
+The following entities are used to model the licensing domain:
+
+- `Brand` – represents a tenant
+- `Product` – represents a licensable product scoped to a brand
+- `LicenseKey` – represents a customer-facing license key scoped to a brand
+- `License` – represents a product-specific entitlement
+
+Database constraints and application-level checks ensure that:
+
+- License keys cannot span multiple brands
+- Each license is associated with a single product
+- Duplicate licenses for the same product and license key are prevented
+
+---
+
+#### Design Decisions and Trade-offs
+
+- **Brand context resolution**  
+  Brand identity is resolved via route parameters (`/brands/{brand}`) rather than
+  authentication tokens. This simplifies the implementation while keeping the
+  trust boundary explicit. Authentication is intentionally designed but not
+  implemented at this stage.
+
+- **License key format**  
+  License keys are generated as opaque, human-readable strings. No cryptographic
+  guarantees are provided at this stage, as key secrecy and rotation strategies
+  are considered an evolvable concern.
+
+- **User identity handling**  
+  The service stores customer email as a reference only and does not manage user
+  identities. This aligns with the non-goals of the system.
+
+---
+
+#### Status
+
+- ✅ License key provisioning: **Implemented**
+- ✅ Multiple licenses per key: **Implemented**
+- ✅ Brand isolation: **Implemented**
+- ✅ Add-on scenario (reuse key): **Implemented**
+- 🟡 Authentication & authorization: **Designed-only**
+
+---
+
