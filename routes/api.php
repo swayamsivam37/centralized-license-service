@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BrandLicenseProvisioningController;
 use App\Http\Controllers\Api\LicenseActivationController;
 use App\Http\Controllers\Api\LicenseLifecycleController;
+use App\Http\Controllers\Api\LicenseValidationController;
 use Illuminate\Support\Facades\Route;
 
 Route::post(
@@ -16,3 +17,5 @@ Route::patch(
 );
 
 Route::post('/activate', [LicenseActivationController::class, 'activate']);
+
+Route::post('/validate', [LicenseValidationController::class, 'validateKey']);
