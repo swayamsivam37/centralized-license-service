@@ -45,7 +45,7 @@ No graphical interface is provided; all interactions happen via HTTP APIs.
 
 #### Brand Systems (Trusted Clients)
 
-Brand systems are internal backend services operated by each brand.  
+Brand systems are internal backend services operated by each brand.
 They are trusted and allowed to manage license data.
 
 Brand systems can:
@@ -69,8 +69,6 @@ End-user products are distributed applications such as:
 They authenticate using license keys and instance identifiers and are treated as
 untrusted clients.
 
-(Activation and validation are covered in later user stories.)
-
 ---
 
 ### Domain Model (High Level)
@@ -91,9 +89,34 @@ Brand
 
 ---
 
+### License Activation Model (US3)
+
+License activation represents the association between a license key and a specific
+end-user instance (e.g. site URL, machine ID, or host).
+
+An activation indicates that a license key is currently in use on a given instance.
+This allows the system to track usage and enables future enforcement of seat limits.
+
+```
+
+Brand
+└── LicenseKey
+├── License (product entitlement)
+└── Activation (instance usage)
+
+```
+
+Key characteristics:
+- Activations belong to license keys, not individual licenses
+- A single activation can unlock multiple product licenses
+- Instance identifiers are opaque strings provided by end-user products
+- Deactivation is supported at the data model level but not yet exposed via API
+
+---
+
 ## 3. Trade-offs and Design Decisions
 
-### License-level lifecycle vs License-key-level lifecycle
+### License-Level Lifecycle vs License-Key-Level Lifecycle
 
 **Decision:**  
 Lifecycle state is attached to individual licenses, not license keys.
@@ -110,10 +133,11 @@ It would prevent partial suspension or expiration of individual products.
 
 ---
 
-### Single lifecycle endpoint with action-based payload
+### Single Lifecycle Endpoint with Action-Based Payload
 
 **Decision:**  
 Use a single endpoint for lifecycle changes:
+
 ```
 
 PATCH /api/brands/{brand}/licenses/{license}
@@ -126,7 +150,6 @@ Payload example:
 ````
 
 **Alternative considered:**
-Separate endpoints such as:
 
 * `/suspend`
 * `/resume`
@@ -143,7 +166,7 @@ The action-based approach keeps lifecycle logic centralized and extensible.
 
 ---
 
-### Explicit brand context in routes
+### Explicit Brand Context in Routes
 
 **Decision:**
 Include `{brand}` in brand-facing routes.
@@ -158,7 +181,7 @@ Authentication is intentionally designed but not implemented at this stage.
 
 ---
 
-### Error handling via domain exceptions
+### Error Handling via Domain Exceptions
 
 **Decision:**
 Invalid transitions raise domain exceptions.
@@ -172,12 +195,59 @@ future improvement.
 
 ---
 
+### Activation at License-Key Level
+
+**Decision:**
+Activations are associated with license keys rather than individual licenses.
+
+**Why:**
+End-user products typically activate a single license key that unlocks multiple
+products or add-ons.
+
+**Alternative considered:**
+Tracking activations per license.
+
+**Why rejected:**
+It would require multiple activations per instance and complicate validation.
+
+---
+
+### Idempotent Activation Requests
+
+**Decision:**
+Activating the same license key for the same instance is idempotent.
+
+**Why:**
+Distributed clients may retry activation due to network failures.
+
+**Trade-off:**
+No explicit signal is returned indicating whether activation was newly created.
+
+---
+
+### Seat Limits (Designed but Not Implemented)
+
+**Decision:**
+Seat limits are intentionally not enforced.
+
+**Intended approach:**
+
+* Add `max_activations` at license or license-key level
+* Count active activations (`deactivated_at IS NULL`)
+* Enforce limits transactionally
+* Reject activations when exceeded
+
+**Why not implemented:**
+Seat limits add concurrency and policy complexity beyond the scope of this exercise.
+
+---
+
 ### Scaling and Evolution Plan
 
 * Add authentication and authorization per brand
-* Introduce activation tracking and seat limits
-* Add audit logs and domain events
-* Introduce caching for read-heavy validation endpoints
+* Enforce seat limits
+* Introduce audit logs and domain events
+* Cache read-heavy validation endpoints
 * Map domain errors to proper HTTP status codes
 
 ---
@@ -186,51 +256,64 @@ future improvement.
 
 ### User Story 1: Brand Can Provision a License
 
-**Summary:**
-Brands can create license keys and associate one or more licenses (products) with
-them for a customer email.
+**Status:** ✅ Implemented
 
-**Status:**
-✅ Implemented
-
-**How it is satisfied:**
-
-* Brands can create license keys
-* Licenses are product-scoped
-* Multiple licenses can share a single license key
-* Brand ownership is enforced
-
-**Out of scope (by design):**
-
-* Billing
-* User accounts
-* UI
+Brands can create license keys and associate one or more licenses with them.
+Brand ownership and isolation are enforced.
 
 ---
 
 ### User Story 2: Brand Can Change License Lifecycle
 
-**Summary:**
-Brands can renew, suspend, resume, or cancel individual licenses.
+**Status:** ✅ Implemented
 
-**Status:**
-✅ Implemented
+Brands can renew, suspend, resume, or cancel licenses.
+Lifecycle transitions are enforced via a domain-level state machine.
 
-**How it is satisfied:**
+---
 
-* Lifecycle logic is centralized in `LicenseLifecycleService`
-* Valid transitions are enforced via a state machine
-* Cancelled licenses are treated as terminal
-* Brand ownership is validated at the domain level
-* API-level feature tests cover valid and invalid scenarios
+### User Story 3: End-User Product Can Activate a License
 
-**Lifecycle rules:**
+**Status:** ✅ Implemented (seat limits designed only)
 
-* `valid → suspended`
-* `suspended → valid`
-* `valid → renewed`
-* `valid | suspended → cancelled`
-* `cancelled → (no further transitions)`
+End-user products can activate a license key for a specific instance and retrieve
+valid entitlements.
+
+**API Endpoint:**
+
+```
+POST /api/activate
+```
+
+Example request:
+
+```json
+{
+  "license_key": "ABCDE-12345",
+  "instance_id": "https://example.com"
+}
+```
+
+Example response:
+
+```json
+{
+  "status": "active",
+  "licenses": [
+    {
+      "product_code": "rankmath",
+      "status": "valid",
+      "expires_at": "2026-01-01"
+    }
+  ]
+}
+```
+
+**Out of scope (by design):**
+
+* Seat limit enforcement
+* License deactivation
+* Abuse protection
 
 ---
 
@@ -240,7 +323,7 @@ Brands can renew, suspend, resume, or cancel individual licenses.
 
 * PHP 8.2+
 * Composer
-* SQLite (default)
+* SQLite
 
 ### Setup
 
@@ -256,7 +339,7 @@ php artisan serve
 
 ### Example API Calls
 
-#### Create a license key with a license (US1)
+#### US1: Provision License
 
 ```bash
 curl -X POST http://localhost:8000/api/brands/1/license-keys \
@@ -274,16 +357,27 @@ curl -X POST http://localhost:8000/api/brands/1/license-keys \
 
 ---
 
-#### Change license lifecycle (US2)
+#### US2: Change License Lifecycle
 
 ```bash
 PATCH /api/brands/1/licenses/1
 ```
 
 ```json
-{
-  "action": "suspend"
-}
+{ "action": "suspend" }
+```
+
+---
+
+#### US3: Activate License Key
+
+```bash
+curl -X POST http://localhost:8000/api/activate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "license_key": "TEST-ACTIVATION-KEY",
+    "instance_id": "https://example.com"
+  }'
 ```
 
 ---
@@ -293,14 +387,16 @@ PATCH /api/brands/1/licenses/1
 ### Known Limitations
 
 * No authentication or authorization layer
-* Domain exceptions currently map to HTTP 500 responses
-* No audit logs or lifecycle history
-* No rate limiting or abuse protection
+* Domain exceptions return HTTP 500 responses
+* No audit logs
+* No rate limiting
+* Seat limits not enforced
+* Activation deactivation not exposed via API
 
 ### Next Steps
 
-* Implement license activation and validation (US3, US4)
-* Introduce proper HTTP error mapping
+* Implement license validation (US4)
+* Map domain errors to proper HTTP status codes
 * Add authentication for brand systems
 * Add observability (logs, metrics, tracing)
 -----
